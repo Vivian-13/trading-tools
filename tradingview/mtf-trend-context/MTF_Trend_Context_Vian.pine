@@ -1,0 +1,285 @@
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// © Vian
+
+//@version=6
+indicator("MTF Trend Context [Vian]", shorttitle = "MTF Trend Context", overlay = true, dynamic_requests = true)
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const int STATE_BEARISH = -1
+const int STATE_NEUTRAL = 0
+const int STATE_BULLISH = 1
+const int STATE_NA = 99
+
+const string GROUP_TREND = "Trend"
+const string GROUP_TIMEFRAMES = "Timeframes"
+const string GROUP_DISPLAY = "Display"
+
+const string PRESET_SCALPING = "Scalping"
+const string PRESET_INTRADAY = "Intraday"
+const string PRESET_SWING = "Swing"
+const string PRESET_CUSTOM = "Custom"
+
+//------------------------------------------------------------------------------
+// Inputs
+//------------------------------------------------------------------------------
+int fastLengthInput = input.int(20, "Fast EMA Length", minval = 1, group = GROUP_TREND)
+int slowLengthInput = input.int(50, "Slow EMA Length", minval = 2, group = GROUP_TREND)
+
+string presetInput = input.string(
+     PRESET_INTRADAY,
+     "Preset",
+     options = [PRESET_SCALPING, PRESET_INTRADAY, PRESET_SWING, PRESET_CUSTOM],
+     group = GROUP_TIMEFRAMES
+)
+
+string customTf1Input = input.timeframe("5", "Custom TF1", group = GROUP_TIMEFRAMES)
+string customTf2Input = input.timeframe("15", "Custom TF2", group = GROUP_TIMEFRAMES)
+string customTf3Input = input.timeframe("60", "Custom TF3", group = GROUP_TIMEFRAMES)
+string customTf4Input = input.timeframe("240", "Custom TF4", group = GROUP_TIMEFRAMES)
+string customTf5Input = input.timeframe("1D", "Custom TF5", group = GROUP_TIMEFRAMES)
+
+string tablePositionInput = input.string(
+     "Top Right",
+     "Table Position",
+     options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"],
+     group = GROUP_DISPLAY
+)
+string textSizeInput = input.string(
+     size.small,
+     "Text Size",
+     options = [size.tiny, size.small, size.normal],
+     group = GROUP_DISPLAY
+)
+bool showAlignmentInput = input.bool(true, "Show Alignment", group = GROUP_DISPLAY)
+
+if slowLengthInput <= fastLengthInput
+    runtime.error("Slow EMA Length must be greater than Fast EMA Length.")
+
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+f_rawState() =>
+    float fastEma = ta.ema(close, fastLengthInput)
+    float slowEma = ta.ema(close, slowLengthInput)
+    bool enoughHistory = bar_index >= slowLengthInput - 1
+    int state = STATE_NA
+    if enoughHistory and not na(close) and not na(fastEma) and not na(slowEma)
+        state := close > fastEma and fastEma > slowEma ? STATE_BULLISH :
+                 close < fastEma and fastEma < slowEma ? STATE_BEARISH :
+                 STATE_NEUTRAL
+    state
+
+f_higherTimeframeState(string tf) =>
+    request.security(
+         syminfo.tickerid,
+         tf,
+         f_rawState()[1],
+         lookahead = barmerge.lookahead_on
+    )
+
+f_equalTimeframeState() =>
+    int state = f_rawState()
+    barstate.isconfirmed ? state : state[1]
+
+f_lowerTimeframeCandidate(string tf) =>
+    [states, closeTimes] = request.security_lower_tf(
+         syminfo.tickerid,
+         tf,
+         [f_rawState(), time_close]
+    )
+
+    int candidate = STATE_NA
+    int count = array.size(states)
+
+    if count > 0
+        if barstate.isconfirmed
+            candidate := array.get(states, count - 1)
+        else
+            int index = count - 1
+            while index >= 0 and candidate == STATE_NA
+                int intrabarCloseTime = array.get(closeTimes, index)
+                if not na(intrabarCloseTime) and intrabarCloseTime <= timenow
+                    candidate := array.get(states, index)
+                index -= 1
+
+    candidate
+
+f_lowerTimeframeState(string tf) =>
+    int candidate = f_lowerTimeframeCandidate(tf)
+    int previousCandidate = candidate[1]
+    candidate != STATE_NA ? candidate :
+         na(previousCandidate) ? STATE_NA :
+         previousCandidate
+
+f_stateForTimeframe(string tf) =>
+    int chartSeconds = timeframe.in_seconds()
+    int requestedSeconds = timeframe.in_seconds(tf)
+
+    int state = STATE_NA
+    if requestedSeconds > chartSeconds
+        state := f_higherTimeframeState(tf)
+    else if requestedSeconds < chartSeconds
+        state := f_lowerTimeframeState(tf)
+    else
+        state := f_equalTimeframeState()
+
+    state
+
+f_timeframeLabel(string tf) =>
+    switch tf
+        "" => "Chart"
+        "1" => "1m"
+        "3" => "3m"
+        "5" => "5m"
+        "15" => "15m"
+        "30" => "30m"
+        "45" => "45m"
+        "60" => "1H"
+        "120" => "2H"
+        "180" => "3H"
+        "240" => "4H"
+        "1D" => "1D"
+        "1W" => "1W"
+        "1M" => "1M"
+        => tf
+
+f_tablePosition(string choice) =>
+    switch choice
+        "Top Left" => position.top_left
+        "Bottom Right" => position.bottom_right
+        "Bottom Left" => position.bottom_left
+        => position.top_right
+
+f_stateText(int state) =>
+    switch state
+        STATE_BULLISH => "▲ BULLISH"
+        STATE_BEARISH => "▼ BEARISH"
+        STATE_NEUTRAL => "• NEUTRAL"
+        => "N/A"
+
+f_stateBackground(int state) =>
+    switch state
+        STATE_BULLISH => color.new(color.rgb(62, 116, 91), 35)
+        STATE_BEARISH => color.new(color.rgb(148, 76, 76), 35)
+        STATE_NEUTRAL => color.new(color.rgb(104, 111, 120), 55)
+        => color.new(color.rgb(104, 111, 120), 75)
+
+f_drawStateRow(table panel, int row, string tf, int state) =>
+    color rowBg = color.new(color.rgb(24, 28, 33), 35)
+    table.cell(panel, 0, row, f_timeframeLabel(tf), text_color = color.white, text_size = textSizeInput, bgcolor = rowBg, text_halign = text.align_left)
+    table.cell(panel, 1, row, f_stateText(state), text_color = color.white, text_size = textSizeInput, bgcolor = f_stateBackground(state), text_halign = text.align_left)
+
+//------------------------------------------------------------------------------
+// Preset selection
+//------------------------------------------------------------------------------
+string tf1 = switch presetInput
+    PRESET_SCALPING => "1"
+    PRESET_INTRADAY => "5"
+    PRESET_SWING => "60"
+    => customTf1Input
+
+string tf2 = switch presetInput
+    PRESET_SCALPING => "5"
+    PRESET_INTRADAY => "15"
+    PRESET_SWING => "240"
+    => customTf2Input
+
+string tf3 = switch presetInput
+    PRESET_SCALPING => "15"
+    PRESET_INTRADAY => "60"
+    PRESET_SWING => "1D"
+    => customTf3Input
+
+string tf4 = switch presetInput
+    PRESET_SCALPING => "60"
+    PRESET_INTRADAY => "240"
+    PRESET_SWING => "1W"
+    => customTf4Input
+
+string tf5 = switch presetInput
+    PRESET_SCALPING => "240"
+    PRESET_INTRADAY => "1D"
+    PRESET_SWING => "1M"
+    => customTf5Input
+
+//------------------------------------------------------------------------------
+// State calculations
+//------------------------------------------------------------------------------
+int state1 = f_stateForTimeframe(tf1)
+int state2 = f_stateForTimeframe(tf2)
+int state3 = f_stateForTimeframe(tf3)
+int state4 = f_stateForTimeframe(tf4)
+int state5 = f_stateForTimeframe(tf5)
+
+int bullishCount =
+     (state1 == STATE_BULLISH ? 1 : 0) +
+     (state2 == STATE_BULLISH ? 1 : 0) +
+     (state3 == STATE_BULLISH ? 1 : 0) +
+     (state4 == STATE_BULLISH ? 1 : 0) +
+     (state5 == STATE_BULLISH ? 1 : 0)
+
+int bearishCount =
+     (state1 == STATE_BEARISH ? 1 : 0) +
+     (state2 == STATE_BEARISH ? 1 : 0) +
+     (state3 == STATE_BEARISH ? 1 : 0) +
+     (state4 == STATE_BEARISH ? 1 : 0) +
+     (state5 == STATE_BEARISH ? 1 : 0)
+
+int validCount =
+     (state1 != STATE_NA ? 1 : 0) +
+     (state2 != STATE_NA ? 1 : 0) +
+     (state3 != STATE_NA ? 1 : 0) +
+     (state4 != STATE_NA ? 1 : 0) +
+     (state5 != STATE_NA ? 1 : 0)
+
+string alignmentText =
+     validCount < 5 ? "MIXED · " + str.tostring(validCount) + "/5 data" :
+     bullishCount == 5 ? "ALL BULLISH · 5/5" :
+     bullishCount == 4 ? "MOSTLY BULLISH · 4/5" :
+     bearishCount == 5 ? "ALL BEARISH · 5/5" :
+     bearishCount == 4 ? "MOSTLY BEARISH · 4/5" :
+     "MIXED"
+
+color alignmentBg =
+     validCount == 5 and bullishCount >= 4 ? color.new(color.rgb(62, 116, 91), 35) :
+     validCount == 5 and bearishCount >= 4 ? color.new(color.rgb(148, 76, 76), 35) :
+     color.new(color.rgb(104, 111, 120), 55)
+
+//------------------------------------------------------------------------------
+// Table
+//------------------------------------------------------------------------------
+int rowCount = showAlignmentInput ? 8 : 7
+var table contextTable = table.new(
+     f_tablePosition(tablePositionInput),
+     2,
+     rowCount,
+     bgcolor = color.new(color.rgb(20, 23, 28), 30),
+     frame_color = color.new(color.gray, 70),
+     frame_width = 1,
+     border_color = color.new(color.gray, 85),
+     border_width = 1
+)
+
+if barstate.isfirst
+    table.merge_cells(contextTable, 0, 0, 1, 0)
+
+if barstate.islast
+    color headerBg = color.new(color.rgb(55, 79, 102), 20)
+    color columnHeaderBg = color.new(color.rgb(45, 52, 61), 35)
+
+    table.cell(contextTable, 0, 0, "MTF TREND CONTEXT", text_color = color.white, text_size = textSizeInput, bgcolor = headerBg, text_halign = text.align_left)
+    table.cell(contextTable, 0, 1, "TF", text_color = color.silver, text_size = textSizeInput, bgcolor = columnHeaderBg, text_halign = text.align_left)
+    table.cell(contextTable, 1, 1, "STATE", text_color = color.silver, text_size = textSizeInput, bgcolor = columnHeaderBg, text_halign = text.align_left)
+
+    f_drawStateRow(contextTable, 2, tf1, state1)
+    f_drawStateRow(contextTable, 3, tf2, state2)
+    f_drawStateRow(contextTable, 4, tf3, state3)
+    f_drawStateRow(contextTable, 5, tf4, state4)
+    f_drawStateRow(contextTable, 6, tf5, state5)
+
+    if showAlignmentInput
+        table.cell(contextTable, 0, 7, "Alignment", text_color = color.silver, text_size = textSizeInput, bgcolor = columnHeaderBg, text_halign = text.align_left)
+        table.cell(contextTable, 1, 7, alignmentText, text_color = color.white, text_size = textSizeInput, bgcolor = alignmentBg, text_halign = text.align_left)
