@@ -115,8 +115,8 @@ f_lowerTimeframeState(string tf) =>
          previousCandidate
 
 f_stateForTimeframe(string tf) =>
-    int chartSeconds = timeframe.in_seconds()
-    int requestedSeconds = timeframe.in_seconds(tf)
+    float chartSeconds = timeframe.in_seconds()
+    float requestedSeconds = timeframe.in_seconds(tf)
 
     int state = STATE_NA
     if requestedSeconds > chartSeconds
