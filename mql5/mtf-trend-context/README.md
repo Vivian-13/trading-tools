@@ -114,9 +114,19 @@ Recommended verification chart: **M15 + Intraday preset**. This shows M5 below t
 - EMA-based classification is intentionally simple and can lag price.
 - A broker/terminal may need time to synchronize history for a requested symbol/timeframe; affected rows display `N/A` until required data is available.
 
-## Compile status
+## Validation status
 
-**static-reviewed, awaiting MetaEditor compiler verification**
+**MT5 runtime / functional validation: PASS**
+
+Verified in MetaTrader 5:
+- indicator compiles sufficiently to attach and run;
+- Intraday, Scalping, Swing, and Custom timeframe selection behave as expected;
+- symbol and chart-timeframe changes refresh correctly;
+- panel remains correctly anchored after chart resize;
+- confirmed-bar behavior was observed in runtime: selected higher-timeframe state does not follow the still-forming candle;
+- panel geometry is contiguous and readable after the corner-positioning fix.
+
+The exact MetaEditor warning count was not recorded separately. MQL5 CodeBase automatic validation remains the next independent compiler/validator gate before publication.
 
 ## License
 

@@ -14,6 +14,7 @@
 
 ### MetaTrader 5 — MQL5 v1.00 port
 
+- MT5 runtime / functional validation completed successfully across preset switching, Custom mode, symbol/timeframe changes, chart resize, panel geometry, and confirmed closed-bar behavior.
 - Added native MetaTrader 5 custom-indicator port.
 - Uses the most recently closed bar (`shift 1`) of each requested timeframe.
 - Added `iMA()` handle lifecycle with `BarsCalculated()` readiness checks and `IndicatorRelease()` cleanup.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Source status: **static-reviewed, awaiting MetaEditor compiler verification**
+Source status: **MT5 runtime / functional validation PASS; ready for MQL5 CodeBase validator**
 
 Target channel: **MQL5 CodeBase**, not MQL5 Market.
 
@@ -166,17 +166,23 @@ Complete this only after local MetaEditor compilation is clean.
 
 ## Local pre-submission verification
 
-Before CodeBase submission, verify in MetaTrader 5:
+Runtime verification completed successfully in MetaTrader 5. The remaining independent gate is the MQL5 CodeBase automatic validator.
 
-- MetaEditor: 0 errors, 0 meaningful warnings.
+Verified items:
+
 - M15 chart + Intraday preset shows M5 / M15 / H1 / H4 / D1.
 - Scalping preset shows M1 / M5 / M15 / H1 / H4.
 - Swing preset shows H1 / H4 / D1 / W1 / MN1.
-- Custom uses all five selected `ENUM_TIMEFRAMES` values.
-- Slow EMA <= Fast EMA is rejected as invalid input.
-- Missing/not-ready data shows N/A.
-- Any N/A prevents ALL/MOSTLY alignment.
-- The state does not move with a still-forming H1/H4/D1 candle.
+- Custom timeframe selection updates correctly.
 - Panel remains anchored and readable after chart resize.
-- Changing chart symbol/timeframe cleanly reinitializes the indicator.
-- Removing the indicator removes its panel objects and releases indicator handles.
+- Changing chart symbol/timeframe refreshes correctly.
+- Confirmed-bar behavior passed runtime observation: the selected higher-timeframe state does not follow the still-forming candle.
+- Panel geometry remains contiguous after the corner-positioning fix.
+
+Static-reviewed safeguards retained:
+- Slow EMA <= Fast EMA is rejected as invalid input.
+- Missing/not-ready data returns N/A.
+- Any N/A prevents ALL/MOSTLY alignment.
+- Removing the indicator deletes its panel objects and releases indicator handles.
+
+Note: the exact MetaEditor warning count was not recorded separately. The CodeBase automatic validator is the next compiler/validator gate.
