@@ -77,7 +77,6 @@ ENUM_TREND_STATE g_states[TF_COUNT];
 datetime        g_closed_bar_times[TF_COUNT];
 double          g_dummy_buffer[];
 string          g_prefix="";
-ENUM_BASE_CORNER g_base_corner=CORNER_RIGHT_UPPER;
 int             g_panel_height=0;
 bool            g_panel_ready=false;
 
@@ -194,35 +193,88 @@ color StateBackground(const ENUM_TREND_STATE state)
   }
 
 //+------------------------------------------------------------------+
-//| Convert display input to the native chart corner.                |
+//| Resolve the panel's top-left pixel origin inside the chart.      |
+//| All cells use CORNER_LEFT_UPPER; requested corners only affect   |
+//| this origin calculation. This keeps multi-column geometry intact.|
 //+------------------------------------------------------------------+
-ENUM_BASE_CORNER ResolveBaseCorner()
+bool GetPanelOrigin(int &origin_x,int &origin_y)
   {
-   switch(InpPanelCorner)
+   long chart_width=0;
+   long chart_height=0;
+
+   if(!ChartGetInteger(0,CHART_WIDTH_IN_PIXELS,0,chart_width) ||
+      !ChartGetInteger(0,CHART_HEIGHT_IN_PIXELS,0,chart_height))
      {
-      case PANEL_TOP_LEFT:     return(CORNER_LEFT_UPPER);
-      case PANEL_BOTTOM_RIGHT: return(CORNER_RIGHT_LOWER);
-      case PANEL_BOTTOM_LEFT:  return(CORNER_LEFT_LOWER);
-      case PANEL_TOP_RIGHT:
-      default:                 return(CORNER_RIGHT_UPPER);
+      origin_x=PANEL_MARGIN_X;
+      origin_y=PANEL_MARGIN_Y;
+      return(false);
      }
+
+   const bool align_right=(InpPanelCorner==PANEL_TOP_RIGHT ||
+                           InpPanelCorner==PANEL_BOTTOM_RIGHT);
+   const bool align_bottom=(InpPanelCorner==PANEL_BOTTOM_RIGHT ||
+                            InpPanelCorner==PANEL_BOTTOM_LEFT);
+
+   int right_x=(int)chart_width-PANEL_MARGIN_X-PANEL_WIDTH;
+   int bottom_y=(int)chart_height-PANEL_MARGIN_Y-g_panel_height;
+
+   if(right_x<PANEL_MARGIN_X)
+      right_x=PANEL_MARGIN_X;
+   if(bottom_y<PANEL_MARGIN_Y)
+      bottom_y=PANEL_MARGIN_Y;
+
+   origin_x=align_right ? right_x : PANEL_MARGIN_X;
+   origin_y=align_bottom ? bottom_y : PANEL_MARGIN_Y;
+   return(true);
   }
 
 //+------------------------------------------------------------------+
-//| Pixel mapping for objects anchored to the selected chart corner. |
+//| Move an existing cell using panel-local coordinates.             |
 //+------------------------------------------------------------------+
-int PanelX(const int local_x,const int width)
+void PositionCell(const string suffix,
+                  const int local_x,
+                  const int local_y,
+                  const int origin_x,
+                  const int origin_y)
   {
-   if(g_base_corner==CORNER_RIGHT_UPPER || g_base_corner==CORNER_RIGHT_LOWER)
-      return(PANEL_MARGIN_X+PANEL_WIDTH-local_x-width);
-   return(PANEL_MARGIN_X+local_x);
+   string name=g_prefix+suffix;
+   ObjectSetInteger(0,name,OBJPROP_CORNER,CORNER_LEFT_UPPER);
+   ObjectSetInteger(0,name,OBJPROP_XDISTANCE,origin_x+local_x);
+   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,origin_y+local_y);
   }
 
-int PanelY(const int local_y,const int height)
+//+------------------------------------------------------------------+
+//| Reposition the existing panel after creation or chart resize.    |
+//+------------------------------------------------------------------+
+void RepositionPanel()
   {
-   if(g_base_corner==CORNER_LEFT_LOWER || g_base_corner==CORNER_RIGHT_LOWER)
-      return(PANEL_MARGIN_Y+g_panel_height-local_y-height);
-   return(PANEL_MARGIN_Y+local_y);
+   int origin_x=PANEL_MARGIN_X;
+   int origin_y=PANEL_MARGIN_Y;
+   GetPanelOrigin(origin_x,origin_y);
+
+   int y=0;
+   PositionCell("HEADER",0,y,origin_x,origin_y);
+   y+=HEADER_HEIGHT;
+
+   PositionCell("COL_TF",0,y,origin_x,origin_y);
+   PositionCell("COL_STATE",TF_COLUMN_WIDTH,y,origin_x,origin_y);
+   y+=COLUMN_HEADER_HEIGHT;
+
+   for(int i=0;i<TF_COUNT;i++)
+     {
+      string index=IntegerToString(i);
+      PositionCell("TF_"+index,0,y,origin_x,origin_y);
+      PositionCell("STATE_"+index,TF_COLUMN_WIDTH,y,origin_x,origin_y);
+      y+=ROW_HEIGHT;
+     }
+
+   if(InpShowAlignment)
+     {
+      PositionCell("ALIGN_LABEL",0,y,origin_x,origin_y);
+      PositionCell("ALIGN_VALUE",TF_COLUMN_WIDTH,y,origin_x,origin_y);
+     }
+
+   ChartRedraw(0);
   }
 
 //+------------------------------------------------------------------+
@@ -247,11 +299,11 @@ bool CreateCell(const string suffix,
       return(false);
      }
 
-   ObjectSetInteger(0,name,OBJPROP_XDISTANCE,PanelX(local_x,width));
-   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,PanelY(local_y,height));
+   ObjectSetInteger(0,name,OBJPROP_XDISTANCE,PANEL_MARGIN_X+local_x);
+   ObjectSetInteger(0,name,OBJPROP_YDISTANCE,PANEL_MARGIN_Y+local_y);
    ObjectSetInteger(0,name,OBJPROP_XSIZE,width);
    ObjectSetInteger(0,name,OBJPROP_YSIZE,height);
-   ObjectSetInteger(0,name,OBJPROP_CORNER,g_base_corner);
+   ObjectSetInteger(0,name,OBJPROP_CORNER,CORNER_LEFT_UPPER);
    ObjectSetInteger(0,name,OBJPROP_ALIGN,alignment);
    ObjectSetInteger(0,name,OBJPROP_READONLY,true);
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
@@ -304,7 +356,7 @@ bool BuildPanel()
          return(false);
      }
 
-   ChartRedraw(0);
+   RepositionPanel();
    return(true);
   }
 
@@ -559,7 +611,6 @@ int OnInit()
    IndicatorSetString(INDICATOR_SHORTNAME,"MTF Trend Context [Vian]");
 
    ResolveTimeframes();
-   g_base_corner=ResolveBaseCorner();
    g_panel_height=HEADER_HEIGHT+COLUMN_HEADER_HEIGHT+(ROW_HEIGHT*TF_COUNT)+(InpShowAlignment ? FOOTER_HEIGHT : 0);
    g_prefix="Vian_MTFTrendContext_"+IntegerToString(ChartID())+"_"+IntegerToString((long)GetTickCount())+"_";
 
@@ -614,7 +665,7 @@ void OnChartEvent(const int id,
                   const string &sparam)
   {
    if(id==CHARTEVENT_CHART_CHANGE)
-      ChartRedraw(0);
+      RepositionPanel();
   }
 
 //+------------------------------------------------------------------+
