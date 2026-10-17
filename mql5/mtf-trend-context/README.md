@@ -126,7 +126,11 @@ Verified in MetaTrader 5:
 - confirmed-bar behavior was observed in runtime: selected higher-timeframe state does not follow the still-forming candle;
 - panel geometry is contiguous and readable after the corner-positioning fix.
 
-The exact MetaEditor warning count was not recorded separately. MQL5 CodeBase automatic validation remains the next independent compiler/validator gate before publication.
+The exact MetaEditor warning count was not recorded separately. The MQL5 CodeBase submission subsequently passed the platform's publication flow and is public.
+
+## Public release
+
+MQL5 CodeBase: https://www.mql5.com/en/code/78506
 
 ## License
 

@@ -2,9 +2,11 @@
 
 ## Status
 
-Source status: **MT5 runtime / functional validation PASS; ready for MQL5 CodeBase validator**
+Source status: **PUBLISHED on MQL5 CodeBase**
 
 Target channel: **MQL5 CodeBase**, not MQL5 Market.
+
+**Public URL:** https://www.mql5.com/en/code/78506
 
 ## Publication metadata
 
@@ -166,7 +168,7 @@ Complete this only after local MetaEditor compilation is clean.
 
 ## Local pre-submission verification
 
-Runtime verification completed successfully in MetaTrader 5. The remaining independent gate is the MQL5 CodeBase automatic validator.
+Runtime verification completed successfully in MetaTrader 5. The MQL5 CodeBase publication flow was subsequently completed and the public page is live.
 
 Verified items:
 
@@ -185,4 +187,4 @@ Static-reviewed safeguards retained:
 - Any N/A prevents ALL/MOSTLY alignment.
 - Removing the indicator deletes its panel objects and releases indicator handles.
 
-Note: the exact MetaEditor warning count was not recorded separately. The CodeBase automatic validator is the next compiler/validator gate.
+Note: the exact MetaEditor warning count was not recorded separately. The public CodeBase release is available at https://www.mql5.com/en/code/78506.
